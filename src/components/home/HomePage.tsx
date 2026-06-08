@@ -85,7 +85,7 @@ function AgentTile({ agent, onClick }: { agent: AgentSummary; onClick: () => voi
       <Box sx={{ mb: 1 }}>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.4 }}>
           <Typography sx={{ fontSize: '0.67rem', color: '#5C6B8A', textTransform: 'uppercase', fontWeight: 700 }}>Utilisation</Typography>
-          <Typography sx={{ fontSize: '0.72rem', fontWeight: 700, color: utilPct >= 75 ? '#2E7D32' : utilPct >= 60 ? '#1565C0' : '#C62828' }}>{utilPct}%</Typography>
+          <Typography sx={{ fontSize: '0.72rem', fontWeight: 700, color: utilPct >= 85 ? '#2E7D32' : utilPct >= 60 ? '#E65100' : '#C62828' }}>{utilPct}%</Typography>
         </Box>
         <LinearProgress
           variant="determinate"
@@ -94,7 +94,7 @@ function AgentTile({ agent, onClick }: { agent: AgentSummary; onClick: () => voi
             height: 5, borderRadius: 3,
             background: '#E8EEF8',
             '& .MuiLinearProgress-bar': {
-              background: utilPct >= 75 ? '#2E7D32' : utilPct >= 60 ? '#1565C0' : '#C62828',
+              background: utilPct >= 85 ? '#2E7D32' : utilPct >= 60 ? '#E65100' : '#C62828',
               borderRadius: 3,
             }
           }}
@@ -104,7 +104,7 @@ function AgentTile({ agent, onClick }: { agent: AgentSummary; onClick: () => voi
       {/* FCR */}
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <Typography sx={{ fontSize: '0.67rem', color: '#5C6B8A', textTransform: 'uppercase', fontWeight: 700 }}>FCR</Typography>
-        <Typography sx={{ fontSize: '0.72rem', fontWeight: 700, color: fcrPct >= 85 ? '#2E7D32' : fcrPct >= 70 ? '#E65100' : '#C62828' }}>{fcrPct}%</Typography>
+        <Typography sx={{ fontSize: '0.72rem', fontWeight: 700, color: fcrPct >= 80 ? '#2E7D32' : fcrPct >= 65 ? '#E65100' : '#C62828' }}>{fcrPct}%</Typography>
       </Box>
     </Paper>
   );
