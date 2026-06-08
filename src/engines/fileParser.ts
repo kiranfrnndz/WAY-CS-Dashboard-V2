@@ -111,7 +111,7 @@ function normaliseCCDRAgent(raw: unknown): string {
   if (comma === -1) return s;
   const last  = s.slice(0, comma).trim();
   const first = s.slice(comma + 1).trim();
-  return first ? `${first} ${last}` : last;
+  const result = first ? `${first} ${last}` : last; return result.replace('A.V', 'AV').replace('Aswin A.V', 'Aswin AV');
 }
 
 function safePhone(val: unknown): string {
