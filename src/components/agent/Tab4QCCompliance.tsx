@@ -305,6 +305,47 @@ export default function Tab4QCCompliance({ enriched, crmRows, agentName }: Tab4P
           </Grid>
         )}
       </Grid>
+
+      {fcrDrillType && (
+        <Dialog open onClose={() => setFcrDrillType(null)} maxWidth="lg" fullWidth>
+          <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Typography variant="h6" fontWeight={700}>
+              {fcrDrillType === 'failed' ? `FCR Failed — ${fcrFailed.length} cases` : `All FCR — ${fcrRecords.length} cases`}
+            </Typography>
+            <Button onClick={() => setFcrDrillType(null)}>Close</Button>
+          </DialogTitle>
+          <DialogContent sx={{ p: 0 }}>
+            <TableContainer sx={{ maxHeight: 500 }}>
+              <Table stickyHeader size="small">
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Ticket ID</TableCell>
+                    <TableCell>Order ID</TableCell>
+                    <TableCell>Contacts</TableCell>
+                    <TableCell>Reason</TableCell>
+                    <TableCell>Sub Reason</TableCell>
+                    <TableCell>Action Taken</TableCell>
+                    <TableCell>Queue</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {(fcrDrillType === 'failed' ? fcrFailed : fcrRecords).map((r, i) => (
+                    <TableRow key={i} sx={{ background: r.fcrMet ? 'transparent' : '#FFF8F8' }}>
+                      <TableCell>{r.ticketId || 'N/A'}</TableCell>
+                      <TableCell>{r.orderId || 'N/A'}</TableCell>
+                      <TableCell>{r.contactCount}</TableCell>
+                      <TableCell>{r.reason}</TableCell>
+                      <TableCell>{r.subReason}</TableCell>
+                      <TableCell>{r.actionTaken}</TableCell>
+                      <TableCell>{r.queue}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          </DialogContent>
+        </Dialog>
+      )}
     </Box>
   );
 }
