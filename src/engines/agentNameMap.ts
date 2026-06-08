@@ -13,7 +13,7 @@
 export const CRM_TO_CANONICAL: Record<string, string> = {
   // ── Exact / near-exact (case variants handled separately) ──
   'Ajesh varghese':          'Ajesh Varghese',
-  'NAUSHAD AHMAD':           'Naushad Ahmad',
+  'NAUSHAD AHMAD':           'Naushad Ahmad','Aswin A.V':'Aswin AV',
 
   // ── CRM first-name-only ──
   'Gokul':                   'Gokul Sarath',

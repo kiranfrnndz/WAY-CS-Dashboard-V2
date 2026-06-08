@@ -191,7 +191,7 @@ export const EXCLUDED_AGENTS = new Set([
   // Not WAY CS India team (confirmed by CS Ops Manager)
   'Aathira Ashok', 'Al-Ameen AS', 'Samuel Chacko',
   'Mike Sudarsanan', 'Shyny Selvia', 'Nivesh R',
-  'Daisy Mathew', 'Goutham S Nair',
+  'Daisy Mathew','Goutham S Nair','Sreelakshmi S','Sreelakshmi','Alexandra Morales','Andrea Ruiz','Angeles Soledad','Brianna Lundy','Daniel Montoya','Gabriella Lacayo','Karen Hopkins','Karolyne Perez','Mauricio Leon','Nicholas Marquez','Oscar Perez','Sarah Gonzalez','Sarah Gonzales','Selina Benavides','Valentina Torres',
 ]);
 
 /**
