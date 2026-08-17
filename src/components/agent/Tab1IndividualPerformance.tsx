@@ -64,8 +64,16 @@ export default function Tab1IndividualPerformance({ summary, enriched }: Tab1Pro
         <StatCard
           label="Productivity"
           value={summary.totalInteractions}
-          sub={`${avgPerDay}/day · Target: ${DAILY_TARGET}/day`}
+          sub={`${avgPerDay}/day over ${summary.workedDays} worked days`}
           color={prodColor}
+          tooltip={`Per-day divides by WORKED days (${summary.workedDays}), not the ${summary.availableDays}-day file span. Target is set on the home page.`}
+        />
+        <StatCard
+          label="Days Worked"
+          value={`${summary.workedDays}/${summary.availableDays}`}
+          sub={`${Math.round(summary.attendanceRate * 100)}% of the file span`}
+          color={summary.attendanceRate >= 0.7 ? '#2E7D32' : summary.attendanceRate >= 0.5 ? '#E65100' : '#C62828'}
+          tooltip="Distinct dates with any call or ticket activity, over the inclusive calendar span of the uploaded files. Week-offs are NOT subtracted, so a full-time agent typically shows below 100%."
         />
         <StatCard label="FCR Rate"
           value={summary.fcrAvailable ? `${fcrPct}%` : 'n/a'}
@@ -95,7 +103,7 @@ export default function Tab1IndividualPerformance({ summary, enriched }: Tab1Pro
           sx={{ background: prodColor, color: '#fff', fontWeight: 700, fontSize: '0.85rem', py: 2, px: 1 }}
         />
         <Typography variant="body2" color="text.secondary">
-          {summary.dates.length} active day{summary.dates.length !== 1 ? 's' : ''} · 
+          {summary.workedDays} of {summary.availableDays} days worked · 
           Avg AHT: {fmtSeconds(summary.avgAHT)} · 
           Avg Hold: {fmtSeconds(summary.avgHoldTime)} · 
           Avg Talk: {fmtSeconds(summary.avgTalkTime)}

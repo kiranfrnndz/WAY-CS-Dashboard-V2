@@ -95,7 +95,10 @@ export default function AgentDashboard({ agentName, summary, allCalls, crmRows, 
           </Box>
 
           <Box sx={{ textAlign: 'right' }}>
-            <Typography sx={{ fontSize: '0.72rem', color: '#5C6B8A' }}>Active dates: {summary.dates.length}</Typography>
+            <Typography sx={{ fontSize: '0.72rem', color: '#5C6B8A' }}>
+              Worked {summary.workedDays} of {summary.availableDays} days
+              {summary.availableDays > 0 && ` (${Math.round(summary.attendanceRate * 100)}%)`}
+            </Typography>
             <Typography sx={{ fontSize: '0.72rem', color: '#5C6B8A' }}>{summary.dates[0]} → {summary.dates[summary.dates.length - 1] || 'N/A'}</Typography>
           </Box>
         </Box>
