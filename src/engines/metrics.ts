@@ -15,7 +15,7 @@ import type {
   QueueSummary, FCRRecord, DuplicateTicket, MissingTicket,
   CoachingInsight, WrapBucket, GapDetail, UnrosteredAgent,
 } from '../types';
-import { isRostered as rosterHas, queueScopeOf, isKnownNonCS } from './roster';
+import { isRostered as rosterHas, queueScopeOf, isKnownNonCS, normaliseKey } from './roster';
 import {
   FCR_EXCLUDED_TYPES,
   HIGH_HOLD_THRESHOLD, LONG_AHT_THRESHOLD,
@@ -384,13 +384,26 @@ export function computeUnrostered(
   ccdrRows: CCDRRow[],
   crmRows:  CRMRow[]
 ): UnrosteredAgent[] {
-  const acc = new Map<string, { calls: number; crmRows: number; ccdr: boolean; crm: boolean }>();
+  // Grouped on the NORMALISED key, not the raw string, so casing and spacing
+  // variants of one person ("LALITA LAMA" / "Lalita Lama") collapse into a
+  // single row instead of inflating the count.
+  const acc = new Map<string, {
+    display: string; variants: Set<string>;
+    calls: number; crmRows: number; ccdr: boolean; crm: boolean;
+  }>();
 
   const bump = (name: string, kind: 'ccdr' | 'crm') => {
-    const key = name.trim();
+    const raw = (name || '').trim();
+    if (!raw) return;
+    const key = normaliseKey(raw);
     if (!key) return;
-    if (!acc.has(key)) acc.set(key, { calls: 0, crmRows: 0, ccdr: false, crm: false });
+    if (!acc.has(key)) {
+      acc.set(key, { display: raw, variants: new Set(), calls: 0, crmRows: 0, ccdr: false, crm: false });
+    }
     const e = acc.get(key)!;
+    e.variants.add(raw);
+    // Prefer a mixed-case display form over an ALL CAPS or all-lower one.
+    if (raw !== raw.toUpperCase() && raw !== raw.toLowerCase()) e.display = raw;
     if (kind === 'ccdr') { e.calls++; e.ccdr = true; }
     else                 { e.crmRows++; e.crm = true; }
   };
@@ -398,13 +411,14 @@ export function computeUnrostered(
   for (const r of ccdrRows) if (!r.rostered) bump(r.rawAgentName || r.agentName, 'ccdr');
   for (const r of crmRows)  if (!r.rostered) bump(r.agentName, 'crm');
 
-  return [...acc.entries()]
-    .map(([name, e]) => ({
-      name,
+  return [...acc.values()]
+    .map(e => ({
+      name: e.display,
       source: (e.ccdr && e.crm ? 'Both' : e.ccdr ? 'CCDR' : 'CRM') as UnrosteredAgent['source'],
       calls: e.calls,
       crmRows: e.crmRows,
-      knownNonCS: isKnownNonCS(name),
+      knownNonCS: isKnownNonCS(e.display),
+      variants: [...e.variants].sort(),
     }))
     .sort((a, b) => (b.calls + b.crmRows) - (a.calls + a.crmRows));
 }

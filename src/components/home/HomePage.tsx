@@ -248,7 +248,12 @@ export default function HomePage({ agents, unrostered = [], onSelectAgent }: Hom
                 </Typography>
                 <Box sx={{ display: 'flex', gap: 0.6, flexWrap: 'wrap' }}>
                   {rows.map(u => (
-                    <Tooltip key={u.name} title={`${u.calls} CCDR calls · ${u.crmRows} CRM rows · source: ${u.source}`}>
+                    <Tooltip
+                      key={u.name}
+                      title={`${u.calls} CCDR calls · ${u.crmRows} CRM rows · source: ${u.source}${
+                        u.variants.length > 1 ? ` · spellings: ${u.variants.join(', ')}` : ''
+                      }`}
+                    >
                       <Chip
                         label={`${u.name} (${u.calls + u.crmRows})`}
                         size="small"

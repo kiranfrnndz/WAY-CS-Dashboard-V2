@@ -115,6 +115,8 @@ export interface UnrosteredAgent {
   calls: number;
   crmRows: number;
   knownNonCS: boolean;
+  /** All raw spellings that collapsed into this row. */
+  variants: string[];
 }
 
 export interface QueueSummary {

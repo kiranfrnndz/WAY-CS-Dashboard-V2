@@ -131,6 +131,10 @@ export const ALIASES: Record<string, string> = {
   'azhar kalam': 'Azhar Abdul Kalam',
   'azhar abdulkalam': 'Azhar Abdul Kalam',
 
+  // ── "MD" prefix forms seen in the CCDR export (Spanish pod) ──
+  'md sattar alam': 'Sattar Alam',
+  'sattar alam md': 'Sattar Alam',
+
   // ── MD Ali (Spanish) — multiple recorded forms ──
   'mohammad ali': 'MD Ali',
   'mohammad haider ali': 'MD Ali',
@@ -163,6 +167,9 @@ export const ALIASES: Record<string, string> = {
 export const KNOWN_NON_CS = new Set<string>([
   // Confirmed non-CS from dashboard review, Aug 2026
   'Esther Cleetus', 'Fazal Sherrif', 'Rahul Vinod', 'Shijith', 'Jonathan Brown',
+  // Variant spellings observed in live CRM/CCDR exports, Aug 2026
+  'Rashmika Santhosh D', 'Sreelaraghavan', 'Greeshma RS', 'Gowri',
+  'Subin MS', 'Vishnu BS', 'Henna Najim S', 'Reshma', 'Vishnu MS',
   // Team Leads
   'Shiju Salam', 'Vishnu V', 'Bijoy Kiran', 'Rashmika', 'Rashmika Santhosh',
   'Vishnu B S', 'Surya Suresh', 'Ansu Varghese', 'Jaison Nelson',
@@ -308,13 +315,28 @@ export function queueScopeOf(raw: string): QueueScope | null {
   return resolveAgent(raw)?.queueScope ?? null;
 }
 
+/**
+ * Known non-CS lookup, prebuilt on both the normalised and compact keys.
+ *
+ * The compact key matters: "Greeshma R S" (list) vs "Greeshma RS" (export) do
+ * not match on the normalised key alone, because normaliseKey collapses
+ * punctuation but not the spaces between initials. Without this, every such
+ * variant fell through to "Unknown" in the unrostered panel — noise that
+ * hides the entries that actually need a decision.
+ */
+const NON_CS_KEYS: Set<string> = (() => {
+  const s = new Set<string>();
+  for (const n of KNOWN_NON_CS) {
+    s.add(normaliseKey(n));
+    s.add(compactKey(n));
+  }
+  return s;
+})();
+
 /** True when the name is a known non-CS person (already ruled out). */
 export function isKnownNonCS(raw: string): boolean {
-  const key = normaliseKey(raw);
-  for (const n of KNOWN_NON_CS) {
-    if (normaliseKey(n) === key) return true;
-  }
-  return false;
+  if (!raw) return false;
+  return NON_CS_KEYS.has(normaliseKey(raw)) || NON_CS_KEYS.has(compactKey(raw));
 }
 
 export const ROSTER_SIZE = {
