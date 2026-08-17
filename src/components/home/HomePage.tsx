@@ -12,7 +12,7 @@ import ChatIcon from '@mui/icons-material/Chat';
 import ConfirmationNumberIcon from '@mui/icons-material/ConfirmationNumber';
 import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
-import type { AgentSummary, UnrosteredAgent, ProductivityMode } from '../../types';
+import type { AgentSummary, UnrosteredAgent, ProductivityMode, ProductivityMeasure } from '../../types';
 import { teamMedianPerDay } from '../../engines/metrics';
 import StatCard from '../shared/StatCard';
 import { fmtPct } from '../../utils/format';
@@ -22,6 +22,8 @@ interface HomePageProps {
   unrostered?: UnrosteredAgent[];
   dailyTarget: number;
   prodMode: ProductivityMode;
+  measure: ProductivityMeasure;
+  onMeasureChange: (m: ProductivityMeasure) => void;
   onTargetChange: (n: number) => void;
   onModeChange: (m: ProductivityMode) => void;
   onSelectAgent: (name: string) => void;
@@ -39,7 +41,7 @@ function initials(name: string): string {
   return name.split(' ').slice(0, 2).map(p => p[0]).join('').toUpperCase();
 }
 
-function AgentTile({ agent, onClick }: { agent: AgentSummary; onClick: () => void }) {
+function AgentTile({ agent, measure, onClick }: { agent: AgentSummary; measure: ProductivityMeasure; onClick: () => void }) {
   const prodColor = PRODUCTIVITY_COLOR[agent.productivity];
   const utilPct = Math.round(agent.utilisation * 100);
   // FCR reads n/a when no CRM rows matched — previously rendered as a red 0%.
@@ -102,6 +104,20 @@ function AgentTile({ agent, onClick }: { agent: AgentSummary; onClick: () => voi
         ))}
       </Box>
 
+      {/* Per-day KPI on the selected measure, over WORKED days. */}
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.75 }}>
+        <Typography sx={{ fontSize: '0.67rem', color: '#5C6B8A', textTransform: 'uppercase', fontWeight: 700 }}>
+          {measure === 'tickets' ? 'Tickets / day' : 'Per day'}
+        </Typography>
+        <Tooltip title={measure === 'tickets'
+          ? `${agent.tickets} tickets over ${agent.workedDays} worked days`
+          : `${agent.totalInteractions} interactions over ${agent.workedDays} worked days`}>
+          <Typography sx={{ fontSize: '0.8rem', fontWeight: 700, color: prodColor }}>
+            {(measure === 'tickets' ? agent.ticketsPerDay : agent.perDay).toFixed(1)}
+          </Typography>
+        </Tooltip>
+      </Box>
+
       {/* Days worked out of the file's span. Shown because per-day figures divide
           by WORKED days, so an agent who worked 5 of 13 reads the same as one who
           worked 13 at the same daily rate — the absence is otherwise invisible. */}
@@ -134,6 +150,15 @@ function AgentTile({ agent, onClick }: { agent: AgentSummary; onClick: () => voi
         />
       </Box>
 
+      {/* Ticket logging ratio — flags handled contacts with no ticket logged. */}
+      {agent.totalInteractions > 0 && agent.ticketRatio < 0.5 && (
+        <Tooltip title={`${agent.tickets} tickets against ${agent.totalInteractions} interactions. Low ratio usually means contacts handled without a ticket logged.`}>
+          <Typography sx={{ fontSize: '0.62rem', color: '#E65100', mb: 0.75 }}>
+            Low ticket logging ({Math.round(agent.ticketRatio * 100)}%)
+          </Typography>
+        </Tooltip>
+      )}
+
       {/* FCR */}
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <Typography sx={{ fontSize: '0.67rem', color: '#5C6B8A', textTransform: 'uppercase', fontWeight: 700 }}>FCR</Typography>
@@ -150,8 +175,8 @@ function AgentTile({ agent, onClick }: { agent: AgentSummary; onClick: () => voi
 }
 
 export default function HomePage({
-  agents, unrostered = [], dailyTarget, prodMode,
-  onTargetChange, onModeChange, onSelectAgent,
+  agents, unrostered = [], dailyTarget, prodMode, measure,
+  onTargetChange, onModeChange, onMeasureChange, onSelectAgent,
 }: HomePageProps) {
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('All');
@@ -199,7 +224,7 @@ export default function HomePage({
     });
   }, [scoped, search, filter]);
 
-  const median = useMemo(() => teamMedianPerDay(agents), [agents]);
+  const median = useMemo(() => teamMedianPerDay(agents, measure), [agents, measure]);
 
   const windowDays  = agents.length ? agents[0].availableDays : 0;
   const windowLabel = useMemo(() => {
@@ -273,6 +298,12 @@ export default function HomePage({
         <Typography sx={{ fontSize: '0.7rem', fontWeight: 700, color: '#5C6B8A', textTransform: 'uppercase' }}>
           Productivity basis
         </Typography>
+        <FormControl size="small" sx={{ minWidth: 165 }}>
+          <Select value={measure} onChange={e => onMeasureChange(e.target.value as ProductivityMeasure)}>
+            <MenuItem value="interactions">Interactions / day</MenuItem>
+            <MenuItem value="tickets">Tickets / day</MenuItem>
+          </Select>
+        </FormControl>
         <FormControl size="small" sx={{ minWidth: 190 }}>
           <Select value={prodMode} onChange={e => onModeChange(e.target.value as ProductivityMode)}>
             <MenuItem value="absolute">Fixed target / day</MenuItem>
@@ -289,7 +320,7 @@ export default function HomePage({
         )}
         <Tooltip title="Median interactions per active day across the English roster. Use this to set a target from evidence rather than assumption.">
           <Chip
-            label={`Team median: ${median.toFixed(1)}/day`}
+            label={`Team median: ${median.toFixed(1)} ${measure === 'tickets' ? 'tickets' : 'interactions'}/day`}
             size="small"
             onClick={prodMode === 'absolute' ? () => onTargetChange(Math.round(median)) : undefined}
             sx={{ fontSize: '0.7rem', background: '#E3F2FD', color: '#1565C0', fontWeight: 700,
@@ -354,7 +385,7 @@ export default function HomePage({
         <Grid container spacing={1.5}>
           {filtered.map(agent => (
             <Grid item xs={12} sm={6} md={4} lg={3} xl={2} key={agent.name}>
-              <AgentTile agent={agent} onClick={() => onSelectAgent(agent.name)} />
+              <AgentTile agent={agent} measure={measure} onClick={() => onSelectAgent(agent.name)} />
             </Grid>
           ))}
         </Grid>

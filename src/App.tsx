@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react';
 import { Box, Container, Typography, AppBar, Toolbar, Chip, Snackbar, Alert, CircularProgress } from '@mui/material';
 import SpeedIcon from '@mui/icons-material/Speed';
-import type { CCDRRow, AgentCallRow, CRMRow, AgentSummary, ProductivityMode } from './types';
+import type { CCDRRow, AgentCallRow, CRMRow, AgentSummary, ProductivityMode, ProductivityMeasure } from './types';
 import { DAILY_TARGET } from './types';
 import { parseCCDR, parseAgentCall, parseCRM } from './engines/fileParser';
 import { computeAgentSummaries, computeUnrostered } from './engines/metrics';
@@ -18,9 +18,10 @@ export default function App() {
   const [selectedAgent, setSelectedAgent] = useState<string | null>(null);
   const [dailyTarget, setDailyTarget] = useState<number>(DAILY_TARGET);
   const [prodMode, setProdMode] = useState<ProductivityMode>('absolute');
+  const [measure, setMeasure] = useState<ProductivityMeasure>('interactions');
 
   const summaries: AgentSummary[] = ccdr || crm
-    ? computeAgentSummaries(ccdr || [], crm || [], dailyTarget, prodMode)
+    ? computeAgentSummaries(ccdr || [], crm || [], dailyTarget, prodMode, measure)
     : [];
 
   // Names present in the data but not on the roster — surfaced, never scored.
@@ -108,6 +109,8 @@ export default function App() {
             unrostered={unrostered}
             dailyTarget={dailyTarget}
             prodMode={prodMode}
+            measure={measure}
+            onMeasureChange={setMeasure}
             onTargetChange={setDailyTarget}
             onModeChange={setProdMode}
             onSelectAgent={setSelectedAgent}

@@ -100,8 +100,15 @@ export interface AgentSummary {
   avgHoldTime: number;
   avgTalkTime: number;
   productivity: 'Below Target' | 'Meets Target' | 'Exceeds Target';
-  /** Interactions per active day — the figure the productivity verdict is based on. */
+  /** Interactions per active day. */
   perDay: number;
+  /** Unique tickets per active day. */
+  ticketsPerDay: number;
+  /**
+   * Tickets / interactions. Well below 1 suggests handled contacts without a
+   * ticket logged — a compliance signal, not a productivity one.
+   */
+  ticketRatio: number;
   /** Distinct dates the agent has any activity on (calls or tickets). */
   workedDays: number;
   /** Calendar days spanned by the uploaded files, inclusive. Same for every agent. */
@@ -243,6 +250,15 @@ export const DAILY_TARGET = 60;
 
 /** How the productivity verdict is decided. */
 export type ProductivityMode = 'absolute' | 'median';
+
+/**
+ * What the per-day KPI counts.
+ *   'interactions' — answered calls + emails + chats
+ *   'tickets'      — unique CRM tickets the agent touched
+ * These are NOT interchangeable: several interactions can attach to one ticket,
+ * and a handled call with no ticket logged appears in one but not the other.
+ */
+export type ProductivityMeasure = 'interactions' | 'tickets';
 export const AVAILABLE_MINUTES = 480;
 
 export const WRAP_BUCKETS = [

@@ -11,7 +11,7 @@
  */
 
 import type {
-  ProductivityMode,
+  ProductivityMode, ProductivityMeasure,
   CCDRRow, CRMRow, EnrichedCall, AgentSummary,
   QueueSummary, FCRRecord, DuplicateTicket, MissingTicket,
   CoachingInsight, WrapBucket, GapDetail, UnrosteredAgent, ReportingWindow,
@@ -94,7 +94,8 @@ export function computeAgentSummaries(
   ccdrRows: CCDRRow[],
   crmRows: CRMRow[],
   dailyTarget: number = DAILY_TARGET,
-  mode: ProductivityMode = 'absolute'
+  mode: ProductivityMode = 'absolute',
+  measure: ProductivityMeasure = 'interactions'
 ): AgentSummary[] {
 
   // Filter to frontline CCDR calls and enrich
@@ -191,6 +192,8 @@ export function computeAgentSummaries(
       escalations: escalations.length, tickets: uniqueTickets.size,
       totalInteractions, utilisation, fcr, fcrAvailable, bounceRate,
       avgAHT, avgHoldTime, avgTalkTime, productivity, perDay,
+      ticketsPerDay: uniqueTickets.size / days,
+      ticketRatio: totalInteractions > 0 ? uniqueTickets.size / totalInteractions : 0,
       workedDays: activeDates.length,
       availableDays,
       attendanceRate: availableDays > 0 ? activeDates.length / availableDays : 0,
@@ -203,22 +206,27 @@ export function computeAgentSummaries(
   // 'median'   — banded against the team's own median, so the verdict stays
   //              meaningful when volume shifts and can never mark everyone red.
   //              Baseline is the English roster only (Spanish excluded).
+  // The verdict is computed on the SELECTED measure, so switching between
+  // interactions and tickets re-bands everyone consistently.
+  const valueOf = (s: AgentSummary) => measure === 'tickets' ? s.ticketsPerDay : s.perDay;
+
   const baseline = summaries.filter(s => s.queueScope === 'English' && s.totalInteractions > 0);
   const median = (() => {
     if (!baseline.length) return 0;
-    const v = baseline.map(s => s.perDay).sort((a, b) => a - b);
+    const v = baseline.map(valueOf).sort((a, b) => a - b);
     const mid = Math.floor(v.length / 2);
     return v.length % 2 ? v[mid] : (v[mid - 1] + v[mid]) / 2;
   })();
 
   for (const s of summaries) {
+    const v = valueOf(s);
     if (mode === 'median' && median > 0) {
-      s.productivity = s.perDay >= median * 1.15 ? 'Exceeds Target'
-        : s.perDay >= median * 0.85 ? 'Meets Target'
+      s.productivity = v >= median * 1.15 ? 'Exceeds Target'
+        : v >= median * 0.85 ? 'Meets Target'
         : 'Below Target';
     } else {
-      s.productivity = s.perDay >= dailyTarget * 1.1 ? 'Exceeds Target'
-        : s.perDay >= dailyTarget * 0.85 ? 'Meets Target'
+      s.productivity = v >= dailyTarget * 1.1 ? 'Exceeds Target'
+        : v >= dailyTarget * 0.85 ? 'Meets Target'
         : 'Below Target';
     }
   }
@@ -227,10 +235,14 @@ export function computeAgentSummaries(
 }
 
 /** Median interactions/day across the English roster — for setting the target from evidence. */
-export function teamMedianPerDay(summaries: AgentSummary[]): number {
+export function teamMedianPerDay(
+  summaries: AgentSummary[],
+  measure: ProductivityMeasure = 'interactions'
+): number {
   const v = summaries
     .filter(s => s.queueScope === 'English' && s.totalInteractions > 0)
-    .map(s => s.perDay).sort((a, b) => a - b);
+    .map(s => measure === 'tickets' ? s.ticketsPerDay : s.perDay)
+    .sort((a, b) => a - b);
   if (!v.length) return 0;
   const mid = Math.floor(v.length / 2);
   return v.length % 2 ? v[mid] : (v[mid - 1] + v[mid]) / 2;
