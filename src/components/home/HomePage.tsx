@@ -102,6 +102,18 @@ function AgentTile({ agent, onClick }: { agent: AgentSummary; onClick: () => voi
         ))}
       </Box>
 
+      {/* Days worked out of the file's span. Shown because per-day figures divide
+          by WORKED days, so an agent who worked 5 of 13 reads the same as one who
+          worked 13 at the same daily rate — the absence is otherwise invisible. */}
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+        <Typography sx={{ fontSize: '0.67rem', color: '#5C6B8A', textTransform: 'uppercase', fontWeight: 700 }}>Days</Typography>
+        <Tooltip title={`Active on ${agent.workedDays} of ${agent.availableDays} days in the file. Week-offs are not subtracted, so a full-time agent typically shows 9-10 of 13.`}>
+          <Typography sx={{ fontSize: '0.72rem', fontWeight: 700, color: '#5C6B8A' }}>
+            {agent.workedDays}/{agent.availableDays}
+          </Typography>
+        </Tooltip>
+      </Box>
+
       {/* Utilisation bar */}
       <Box sx={{ mb: 1 }}>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.4 }}>
@@ -189,13 +201,24 @@ export default function HomePage({
 
   const median = useMemo(() => teamMedianPerDay(agents), [agents]);
 
+  const windowDays  = agents.length ? agents[0].availableDays : 0;
+  const windowLabel = useMemo(() => {
+    const all = agents.flatMap(a => a.dates).sort();
+    return all.length ? `${all[0]} to ${all[all.length - 1]}` : '';
+  }, [agents]);
+
   const englishCount = useMemo(() => agents.filter(a => a.queueScope === 'English').length, [agents]);
   const spanishCount = useMemo(() => agents.filter(a => a.queueScope === 'Spanish').length, [agents]);
 
   return (
     <Box>
       {/* Global stats */}
-      <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 1.5, mb: 3 }}>
+      <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(8, 1fr)', gap: 1.2, mb: 3 }}>
+        <StatCard label="Reporting Window"
+          value={windowDays ? `${windowDays} days` : '—'}
+          sub={windowLabel}
+          color="#455A64"
+          tooltip="Calendar span of the uploaded files, inclusive. Week-offs and leave are not subtracted." />
         <StatCard label={scope === 'All' ? 'Rostered Agents' : `${scope} Agents`} value={totals.agents} icon={<PersonIcon />} color="#1565C0"
           tooltip={`Roster: ${englishCount} English + ${spanishCount} Spanish`} />
         <StatCard label="Total Calls" value={totals.calls.toLocaleString()} icon={<PhoneIcon />} color="#7B1FA2" />

@@ -102,12 +102,25 @@ export interface AgentSummary {
   productivity: 'Below Target' | 'Meets Target' | 'Exceeds Target';
   /** Interactions per active day — the figure the productivity verdict is based on. */
   perDay: number;
+  /** Distinct dates the agent has any activity on (calls or tickets). */
+  workedDays: number;
+  /** Calendar days spanned by the uploaded files, inclusive. Same for every agent. */
+  availableDays: number;
+  /** workedDays / availableDays. */
+  attendanceRate: number;
   /**
    * Union of CCDR call dates AND CRM ticket dates. Previously call dates only,
    * which dropped email-only days from the denominator and inflated per-day
    * productivity and utilisation (an email-only agent divided by a single day).
    */
   dates: string[];
+}
+
+/** Reporting window derived from the uploaded files. */
+export interface ReportingWindow {
+  start: string;      // YYYY-MM-DD
+  end: string;        // YYYY-MM-DD
+  availableDays: number;  // inclusive calendar span
 }
 
 /** An agent name present in the data but NOT on the roster. */

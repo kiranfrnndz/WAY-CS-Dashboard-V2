@@ -14,7 +14,7 @@ import type {
   ProductivityMode,
   CCDRRow, CRMRow, EnrichedCall, AgentSummary,
   QueueSummary, FCRRecord, DuplicateTicket, MissingTicket,
-  CoachingInsight, WrapBucket, GapDetail, UnrosteredAgent,
+  CoachingInsight, WrapBucket, GapDetail, UnrosteredAgent, ReportingWindow,
 } from '../types';
 import { isRostered as rosterHas, queueScopeOf, isKnownNonCS, normaliseKey } from './roster';
 import {
@@ -55,6 +55,39 @@ function secToTime(s: number): string {
   return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
 }
 
+// ── Reporting window ──────────────────────────────────────────
+
+/**
+ * The period the uploaded files cover, taken as the min and max date across
+ * BOTH sources. Available days is the inclusive calendar span — e.g. an
+ * Aug 1-13 export gives 13 available days.
+ *
+ * Note this is the raw calendar span: it does not subtract week-offs or leave,
+ * because the data cannot distinguish a week-off from an absence from a day
+ * with no logged activity. Attendance rate below should be read with that in
+ * mind — an agent with a rotating week-off pair will legitimately show around
+ * 9-10 of 13 rather than 13 of 13.
+ */
+export function computeReportingWindow(
+  ccdrRows: CCDRRow[],
+  crmRows: CRMRow[]
+): ReportingWindow {
+  const dates: string[] = [];
+  for (const r of ccdrRows) if (r.date) dates.push(r.date.substring(0, 10));
+  for (const r of crmRows)  if (r.date) dates.push(r.date.substring(0, 10));
+
+  if (!dates.length) return { start: '', end: '', availableDays: 0 };
+
+  dates.sort();
+  const start = dates[0];
+  const end   = dates[dates.length - 1];
+
+  const ms = Date.parse(`${end}T00:00:00Z`) - Date.parse(`${start}T00:00:00Z`);
+  const availableDays = Number.isFinite(ms) ? Math.round(ms / 86400000) + 1 : 0;
+
+  return { start, end, availableDays };
+}
+
 // ── Agent Summary ─────────────────────────────────────────────
 
 export function computeAgentSummaries(
@@ -65,6 +98,7 @@ export function computeAgentSummaries(
 ): AgentSummary[] {
 
   // Filter to frontline CCDR calls and enrich
+  const { availableDays } = computeReportingWindow(ccdrRows, crmRows);
   const frontlineCCDR = ccdrRows.filter(r => r.rostered);
   const enriched      = enrichCalls(frontlineCCDR, crmRows);
 
@@ -157,6 +191,9 @@ export function computeAgentSummaries(
       escalations: escalations.length, tickets: uniqueTickets.size,
       totalInteractions, utilisation, fcr, fcrAvailable, bounceRate,
       avgAHT, avgHoldTime, avgTalkTime, productivity, perDay,
+      workedDays: activeDates.length,
+      availableDays,
+      attendanceRate: availableDays > 0 ? activeDates.length / availableDays : 0,
       dates: activeDates,
     });
   }
