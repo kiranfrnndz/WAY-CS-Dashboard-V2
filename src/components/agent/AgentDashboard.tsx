@@ -87,8 +87,10 @@ export default function AgentDashboard({ agentName, summary, allCalls, crmRows, 
               <Chip label={`${summary.chats} chats`} size="small" variant="outlined" sx={{ fontSize: '0.7rem' }} />
               <Chip label={`${Math.round(summary.utilisation * 100)}% util`} size="small" variant="outlined"
                 sx={{ fontSize: '0.7rem', color: summary.utilisation >= 0.75 ? '#2E7D32' : summary.utilisation >= 0.6 ? '#1565C0' : '#C62828' }} />
-              <Chip label={`${Math.round(summary.fcr * 100)}% FCR`} size="small" variant="outlined"
-                sx={{ fontSize: '0.7rem', color: summary.fcr >= 0.85 ? '#2E7D32' : '#E65100' }} />
+              <Chip
+                label={summary.fcrAvailable ? `${Math.round(summary.fcr * 100)}% FCR` : 'FCR n/a'}
+                size="small" variant="outlined"
+                sx={{ fontSize: '0.7rem', color: !summary.fcrAvailable ? '#94A3B8' : summary.fcr >= 0.85 ? '#2E7D32' : '#E65100' }} />
             </Box>
           </Box>
 

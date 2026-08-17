@@ -3,7 +3,7 @@ import { Box, Container, Typography, AppBar, Toolbar, Chip, Snackbar, Alert, Cir
 import SpeedIcon from '@mui/icons-material/Speed';
 import type { CCDRRow, AgentCallRow, CRMRow, AgentSummary } from './types';
 import { parseCCDR, parseAgentCall, parseCRM } from './engines/fileParser';
-import { computeAgentSummaries } from './engines/metrics';
+import { computeAgentSummaries, computeUnrostered } from './engines/metrics';
 import FileUploadPanel from './components/shared/FileUploadPanel';
 import HomePage from './components/home/HomePage';
 import AgentDashboard from './components/agent/AgentDashboard';
@@ -19,6 +19,9 @@ export default function App() {
   const summaries: AgentSummary[] = ccdr || crm
     ? computeAgentSummaries(ccdr || [], crm || [])
     : [];
+
+  // Names present in the data but not on the roster — surfaced, never scored.
+  const unrostered = ccdr || crm ? computeUnrostered(ccdr || [], crm || []) : [];
 
   const handleFile = useCallback(async (file: File, type: 'ccdr' | 'agent' | 'crm') => {
     setLoading(true);
@@ -99,6 +102,7 @@ export default function App() {
         ) : (
           <HomePage
             agents={summaries}
+            unrostered={unrostered}
             onSelectAgent={setSelectedAgent}
           />
         )}

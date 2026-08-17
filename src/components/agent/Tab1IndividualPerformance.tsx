@@ -67,7 +67,10 @@ export default function Tab1IndividualPerformance({ summary, enriched }: Tab1Pro
           sub={`${avgPerDay}/day · Target: ${DAILY_TARGET}/day`}
           color={prodColor}
         />
-        <StatCard label="FCR Rate" value={`${fcrPct}%`} sub="First Contact Resolution" color={fcrPct >= 80 ? '#2E7D32' : '#E65100'} />
+        <StatCard label="FCR Rate"
+          value={summary.fcrAvailable ? `${fcrPct}%` : 'n/a'}
+          sub={summary.fcrAvailable ? 'First Contact Resolution' : 'No FCR-eligible CRM rows matched'}
+          color={!summary.fcrAvailable ? '#94A3B8' : fcrPct >= 80 ? '#2E7D32' : '#E65100'} />
         <StatCard
           label="Bounce Rate"
           value={`${Math.round(summary.bounceRate * 100)}%`}
@@ -124,7 +127,9 @@ export default function Tab1IndividualPerformance({ summary, enriched }: Tab1Pro
             <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
               {[
                 { label: 'Utilisation', value: utilPct, color: utilPct >= 75 ? '#2E7D32' : '#1565C0', target: 60 },
-                { label: 'FCR Rate', value: fcrPct, color: fcrPct >= 80 ? '#2E7D32' : '#E65100', target: 80 },
+                ...(summary.fcrAvailable
+                  ? [{ label: 'FCR Rate', value: fcrPct, color: fcrPct >= 80 ? '#2E7D32' : '#E65100', target: 80 }]
+                  : []),
               ].map(g => (
                 <Box key={g.label} sx={{ textAlign: 'center' }}>
                   <ResponsiveContainer width="100%" height={110}>

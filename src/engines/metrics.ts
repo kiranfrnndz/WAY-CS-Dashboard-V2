@@ -13,10 +13,11 @@
 import type {
   CCDRRow, CRMRow, EnrichedCall, AgentSummary,
   QueueSummary, FCRRecord, DuplicateTicket, MissingTicket,
-  CoachingInsight, WrapBucket, GapDetail,
+  CoachingInsight, WrapBucket, GapDetail, UnrosteredAgent,
 } from '../types';
+import { isRostered as rosterHas, queueScopeOf, isKnownNonCS } from './roster';
 import {
-  EXCLUDED_AGENTS, FCR_EXCLUDED_TYPES,
+  FCR_EXCLUDED_TYPES,
   HIGH_HOLD_THRESHOLD, LONG_AHT_THRESHOLD,
   DAILY_TARGET, AVAILABLE_MINUTES, WRAP_BUCKETS,
   ANSWERED_STATUSES,
@@ -25,8 +26,12 @@ import { enrichCalls } from './crmMatcher';
 
 // ── Helpers ───────────────────────────────────────────────────
 
+/**
+ * Roster membership. ALLOWLIST — was previously a blacklist, so any name absent
+ * from the exclusion set counted as frontline and scored silently.
+ */
 export function isFrontline(name: string): boolean {
-  return !!name.trim() && !EXCLUDED_AGENTS.has(name.trim());
+  return rosterHas(name);
 }
 
 export function fmtSec(s: number): string {
@@ -57,7 +62,7 @@ export function computeAgentSummaries(
 ): AgentSummary[] {
 
   // Filter to frontline CCDR calls and enrich
-  const frontlineCCDR = ccdrRows.filter(r => isFrontline(r.agentName));
+  const frontlineCCDR = ccdrRows.filter(r => r.rostered);
   const enriched      = enrichCalls(frontlineCCDR, crmRows);
 
   // Group enriched calls by canonical agent name
@@ -72,7 +77,7 @@ export function computeAgentSummaries(
   const crmByAgent = new Map<string, CRMRow[]>();
   for (const row of crmRows) {
     const name = row.canonicalName;
-    if (!name || !isFrontline(name)) continue;
+    if (!row.rostered || !name) continue;
     if (!crmByAgent.has(name)) crmByAgent.set(name, []);
     crmByAgent.get(name)!.push(row);
   }
@@ -102,7 +107,13 @@ export function computeAgentSummaries(
     const chatCount   = chats.length;
     const totalInteractions = callCount + emailCount + chatCount;
 
-    const activeDates = [...new Set(calls.map(c => c.date).filter(Boolean))].sort();
+    // Active days = CCDR call dates UNION CRM ticket dates.
+    // Call dates alone dropped email-only days, which shrank the denominator and
+    // inflated per-day productivity and utilisation (e.g. 138 emails / 1 day = 100%).
+    const activeDates = [...new Set([
+      ...calls.map(c => c.date),
+      ...agentCRM.map(r => (r.date || '').substring(0, 10)),
+    ].filter(Boolean))].sort();
     const days        = activeDates.length || 1;
     const perDay      = totalInteractions / days;
 
@@ -129,9 +140,9 @@ export function computeAgentSummaries(
       if (!orderGroups.has(r.orderId)) orderGroups.set(r.orderId, []);
       orderGroups.get(r.orderId)!.push(r);
     }
-    const fcrMet    = [...orderGroups.values()].filter(g => g.length === 1).length;
-    const fcrTotal  = orderGroups.size || 1;
-    const fcr       = fcrMet / fcrTotal;
+    const fcrMet       = [...orderGroups.values()].filter(g => g.length === 1).length;
+    const fcrAvailable = orderGroups.size > 0;
+    const fcr          = fcrAvailable ? fcrMet / orderGroups.size : 0;
 
     const bounceRate  = answered.length > 0 ? bouncedCalls.length / answered.length : 0;
     const avgAHT      = answered.length ? answered.reduce((s,c) => s+c.aht,       0) / answered.length : 0;
@@ -139,9 +150,11 @@ export function computeAgentSummaries(
     const avgTalkTime = answered.length ? answered.reduce((s,c) => s+c.talkTime,  0) / answered.length : 0;
 
     summaries.push({
-      name, calls: callCount, emails: emailCount, chats: chatCount,
+      name,
+      queueScope: queueScopeOf(name) ?? 'English',
+      calls: callCount, emails: emailCount, chats: chatCount,
       escalations: escalations.length, tickets: uniqueTickets.size,
-      totalInteractions, utilisation, fcr, bounceRate,
+      totalInteractions, utilisation, fcr, fcrAvailable, bounceRate,
       avgAHT, avgHoldTime, avgTalkTime, productivity,
       dates: activeDates,
     });
@@ -313,7 +326,7 @@ export function computeCoachingInsights(
     insights.push({ type:'strength', category:'Productivity', label:'High Productivity',
       value:`${summary.totalInteractions} interactions (${perDay.toFixed(1)}/day)`, details:[], severity:'low' });
 
-  if (summary.fcr >= 0.85)
+  if (summary.fcrAvailable && summary.fcr >= 0.85)
     insights.push({ type:'strength', category:'FCR', label:'High FCR Rate',
       value:`${Math.round(summary.fcr*100)}%`, details:[], severity:'low' });
 
@@ -353,4 +366,50 @@ export function computeCoachingInsights(
       value:`${duplicates.length} duplicate OGIs`, details:[], severity:'medium' });
 
   return insights;
+}
+
+
+// ── Unrostered activity ───────────────────────────────────────
+
+/**
+ * Agent names present in the uploaded data but NOT on the roster.
+ *
+ * Under the old blacklist these were silently scored as frontline (this is how
+ * Esther Cleetus, Fazal Sherrif, Rahul Vinod and Jonathan Brown ended up with
+ * agent cards). Under the allowlist they are excluded from KPIs, and surfaced
+ * here so a genuine new joiner or an unmapped name variant is visible rather
+ * than lost.
+ */
+export function computeUnrostered(
+  ccdrRows: CCDRRow[],
+  crmRows:  CRMRow[]
+): UnrosteredAgent[] {
+  const acc = new Map<string, { calls: number; crmRows: number; ccdr: boolean; crm: boolean }>();
+
+  const bump = (name: string, kind: 'ccdr' | 'crm') => {
+    const key = name.trim();
+    if (!key) return;
+    if (!acc.has(key)) acc.set(key, { calls: 0, crmRows: 0, ccdr: false, crm: false });
+    const e = acc.get(key)!;
+    if (kind === 'ccdr') { e.calls++; e.ccdr = true; }
+    else                 { e.crmRows++; e.crm = true; }
+  };
+
+  for (const r of ccdrRows) if (!r.rostered) bump(r.rawAgentName || r.agentName, 'ccdr');
+  for (const r of crmRows)  if (!r.rostered) bump(r.agentName, 'crm');
+
+  return [...acc.entries()]
+    .map(([name, e]) => ({
+      name,
+      source: (e.ccdr && e.crm ? 'Both' : e.ccdr ? 'CCDR' : 'CRM') as UnrosteredAgent['source'],
+      calls: e.calls,
+      crmRows: e.crmRows,
+      knownNonCS: isKnownNonCS(name),
+    }))
+    .sort((a, b) => (b.calls + b.crmRows) - (a.calls + a.crmRows));
+}
+
+/** Team-level aggregate scope: English roster only, so the baseline stays clean. */
+export function teamBaseline(summaries: AgentSummary[]): AgentSummary[] {
+  return summaries.filter(s => s.queueScope === 'English');
 }

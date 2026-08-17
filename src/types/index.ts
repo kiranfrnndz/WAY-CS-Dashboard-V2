@@ -1,3 +1,5 @@
+import type { QueueScope } from '../engines/roster';
+
 // ============================================================
 // CORE DATA TYPES — derived from exact column inspection
 // ============================================================
@@ -7,7 +9,10 @@ export interface CCDRRow {
   date: string;
   time: string;
   queue: string;          // Call Center Name: Airport | Global Main | City | etc.
-  agentName: string;      // Normalised "FirstName LastName" (CCDR canonical form)
+  agentName: string;      // ROSTER canonical name when resolvable, else raw export name
+  rawAgentName: string;   // Exactly as the export had it, after "(*)" strip and comma flip
+  rostered: boolean;      // Resolved to a roster member?
+  queueScope: QueueScope | null;
   callType: string;       // 'Inbound' (all CCDR rows are inbound queue calls)
   callStatus: string;     // Answered | Abandoned | Transferred | Overflow - Time
   callerNumber: string;
@@ -24,6 +29,8 @@ export interface AgentCallRow {
   date: string;
   time: string;
   agentName: string;
+  rawAgentName: string;
+  rostered: boolean;
   callType: string;       // "Inbound ACD" | "Outbound"
   callStatus: string;
   callerNumber: string;
@@ -38,8 +45,10 @@ export interface AgentCallRow {
 export interface CRMRow {
   ticketId: string;
   orderId: string;        // OGI field
-  agentName: string;      // Resolved to canonical via agentNameMap
-  canonicalName: string;  // Always the CCDR-form name after resolution
+  agentName: string;      // Raw name exactly as the CRM export had it
+  canonicalName: string;  // ROSTER canonical name; '' when unrostered
+  rostered: boolean;      // Resolved to a roster member?
+  queueScope: QueueScope | null;
   date: string;           // from Ticket_created_date (use this — interaction timestamp is default midnight)
   time: string;
   interactionType: string;
@@ -71,6 +80,7 @@ export interface EnrichedCall extends CCDRRow {
 
 export interface AgentSummary {
   name: string;
+  queueScope: QueueScope;
   calls: number;
   emails: number;
   chats: number;
@@ -79,12 +89,32 @@ export interface AgentSummary {
   totalInteractions: number;
   utilisation: number;
   fcr: number;
+  /**
+   * False when the agent has NO FCR-eligible CRM rows. Previously this case
+   * produced 0% (0 divided by a fallback of 1), which read as a performance
+   * failure when it actually meant "no CRM data matched". Render as n/a.
+   */
+  fcrAvailable: boolean;
   bounceRate: number;
   avgAHT: number;
   avgHoldTime: number;
   avgTalkTime: number;
   productivity: 'Below Target' | 'Meets Target' | 'Exceeds Target';
+  /**
+   * Union of CCDR call dates AND CRM ticket dates. Previously call dates only,
+   * which dropped email-only days from the denominator and inflated per-day
+   * productivity and utilisation (an email-only agent divided by a single day).
+   */
   dates: string[];
+}
+
+/** An agent name present in the data but NOT on the roster. */
+export interface UnrosteredAgent {
+  name: string;
+  source: 'CCDR' | 'CRM' | 'Both';
+  calls: number;
+  crmRows: number;
+  knownNonCS: boolean;
 }
 
 export interface QueueSummary {
@@ -157,42 +187,14 @@ export interface GapDetail {
  * Uses CCDR canonical names (FirstName LastName).
  * Also includes CRM-only name variants for the same people.
  */
-export const EXCLUDED_AGENTS = new Set([
-  // Team Leads
-  'Shiju Salam', 'Vishnu V', 'Bijoy Kiran',
-  'Rashmika', 'Rashmika Santhosh', 'Rashmika Santhosh D',
-  'Vishnu B S', 'Vishnu BS', 'Surya Suresh', 'surya suresh',
-  'Ansu Varghese', 'Jaison Nelson',
-  // Leadership
-  'Joyson Fernandez', 'Anju Mareeta Lean',
-  // Reviews
-  'Tharun Sunil Kumar', 'Jijo Papachan', 'Muvithra M',
-  'Blessy Hillary', 'Abhilash Augustin',
-  // Disputes
-  'Gowri S', 'Gowri',
-  'Greeshma R S', 'Greeshma RS',
-  'Sreela R', 'Sreelaraghavan',   // same person, email sreela.r@way.com
-  'Subin M S', 'Subin MS',
-  // QC
-  'Henna Najim S', 'Henna Najim',
-  'Vidya Vijayan',
-  'Reshma Sunil', 'Reshma',
-  'Rijisha S Kumar', 'Rijisha',
-  // L2
-  'Jithin S',
-  // Reporting
-  'Vishnu M S', 'Vishnu MS',
-  // SME
-  'Lalita Lama', 'LALITA LAMA', 'Althaf Z',
-  // AI
-  'ai-decagon ai-decagon',
-  // Ops executive
-  'Teena GM',
-  // Not WAY CS India team (confirmed by CS Ops Manager)
-  'Aathira Ashok', 'Al-Ameen AS', 'Samuel Chacko',
-  'Mike Sudarsanan', 'Shyny Selvia', 'Nivesh R',
-  'Daisy Mathew','Goutham S Nair','Sreelakshmi S','Sreelakshmi','Alexandra Morales','Andrea Ruiz','Angeles Soledad','Brianna Lundy','Daniel Montoya','Gabriella Lacayo','Karen Hopkins','Karolyne Perez','Mauricio Leon','Nicholas Marquez','Oscar Perez','Sarah Gonzalez','Sarah Gonzales','Selina Benavides','Valentina Torres',
-]);
+/**
+ * DEPRECATED — replaced by the allowlist in engines/roster.ts.
+ *
+ * The blacklist model meant anyone not explicitly listed counted as frontline,
+ * so non-CS names (Esther Cleetus, Fazal Sherrif, Rahul Vinod, Jonathan Brown)
+ * scored silently. Roster membership is now explicit; see roster.ts.
+ */
+export const EXCLUDED_AGENTS = new Set<string>();
 
 /**
  * CRM interaction types excluded from FCR calculation.

@@ -50,7 +50,7 @@
 
 import * as XLSX from 'xlsx';
 import type { CCDRRow, AgentCallRow, CRMRow } from '../types';
-import { resolveCRMName } from './agentNameMap';
+import { resolveCanonical, queueScopeOf } from './roster';
 
 // ── Time helpers ──────────────────────────────────────────────
 
@@ -105,13 +105,20 @@ function parseCRMDatetime(val: unknown): { date: string; time: string } {
  */
 function normaliseCCDRAgent(raw: unknown): string {
   if (!raw || typeof raw !== 'string') return '';
-  const s = raw.trim();
+
+  // Strip Oracle export markers such as "(*)" before splitting.
+  // "Varghese, Ajesh (*)" -> "Varghese, Ajesh"
+  let s = raw.replace(/\(\s*\*\s*\)/g, ' ').replace(/\s+/g, ' ').trim();
   if (!s) return '';
+
   const comma = s.indexOf(',');
   if (comma === -1) return s;
   const last  = s.slice(0, comma).trim();
   const first = s.slice(comma + 1).trim();
-  const result = first ? `${first} ${last}` : last; return result.replace('A.V', 'AV').replace('Aswin A.V', 'Aswin AV');
+  s = first ? `${first} ${last}` : last;
+
+  // No cosmetic .replace() patching here — roster.ts owns alias resolution.
+  return s.replace(/\s+/g, ' ').trim();
 }
 
 function safePhone(val: unknown): string {
@@ -198,12 +205,20 @@ export async function parseCCDR(file: File): Promise<CCDRRow[]> {
     const { date, time } = parseCCDRDatetime(startRaw);
     if (!date) continue;
 
+    const rawAgent  = normaliseCCDRAgent(row[4]);
+    const canonical = resolveCanonical(rawAgent);
+
     rows.push({
       callId:          `ccdr-${i}-${id++}`,
       date,
       time,
       queue,
-      agentName:       normaliseCCDRAgent(row[4]),
+      // agentName is the ROSTER name when resolvable, else the raw export name
+      // so unrostered activity stays visible instead of being silently dropped.
+      agentName:       canonical ?? rawAgent,
+      rawAgentName:    rawAgent,
+      rostered:        canonical !== null,
+      queueScope:      queueScopeOf(rawAgent),
       callType:        'Inbound',
       callStatus:      safeStr(row[9]),
       callerNumber:    safePhone(row[7]),
@@ -247,7 +262,9 @@ export async function parseAgentCall(file: File): Promise<AgentCallRow[]> {
       callId:       `agent-${i}-${id++}`,
       date,
       time,
-      agentName:    normaliseCCDRAgent(agentRaw),
+      agentName:    resolveCanonical(normaliseCCDRAgent(agentRaw)) ?? normaliseCCDRAgent(agentRaw),
+      rawAgentName: normaliseCCDRAgent(agentRaw),
+      rostered:     resolveCanonical(normaliseCCDRAgent(agentRaw)) !== null,
       callType:     safeStr(row[3]),   // "Inbound ACD" | "Outbound"
       callStatus:   'Answered',
       callerNumber: safePhone(row[5]),
@@ -277,8 +294,9 @@ export async function parseCRM(file: File): Promise<CRMRow[]> {
     const { date, time } = parseCRMDatetime(raw['Ticket_created_date']);
 
     const rawAgent  = safeStr(raw['Agent Name']);
-    const canonical = resolveCRMName(rawAgent);
-    if (canonical === null) continue;   // _EXCLUDE_ sentinel
+    const canonical = resolveCanonical(rawAgent);
+    // Unrostered rows are RETAINED with an empty canonicalName so they can be
+    // reported in the unrostered panel. Metrics filter on `rostered`.
 
     const vertical    = safeStr(raw['Vertical']);
     const subVertical = safeStr(raw['SubVertical']);
@@ -287,7 +305,9 @@ export async function parseCRM(file: File): Promise<CRMRow[]> {
       ticketId,
       orderId:         safeStr(raw['OGI']),
       agentName:       rawAgent,
-      canonicalName:   canonical,
+      canonicalName:   canonical ?? '',
+      rostered:        canonical !== null,
+      queueScope:      queueScopeOf(rawAgent),
       date,
       time,
       interactionType: safeStr(raw['Interaction']),
