@@ -11,6 +11,7 @@
  */
 
 import type {
+  ProductivityMode,
   CCDRRow, CRMRow, EnrichedCall, AgentSummary,
   QueueSummary, FCRRecord, DuplicateTicket, MissingTicket,
   CoachingInsight, WrapBucket, GapDetail, UnrosteredAgent,
@@ -58,7 +59,9 @@ function secToTime(s: number): string {
 
 export function computeAgentSummaries(
   ccdrRows: CCDRRow[],
-  crmRows: CRMRow[]
+  crmRows: CRMRow[],
+  dailyTarget: number = DAILY_TARGET,
+  mode: ProductivityMode = 'absolute'
 ): AgentSummary[] {
 
   // Filter to frontline CCDR calls and enrich
@@ -117,10 +120,8 @@ export function computeAgentSummaries(
     const days        = activeDates.length || 1;
     const perDay      = totalInteractions / days;
 
-    const productivity: AgentSummary['productivity'] =
-      perDay >= DAILY_TARGET * 1.1  ? 'Exceeds Target'
-      : perDay >= DAILY_TARGET * 0.85 ? 'Meets Target'
-      : 'Below Target';
+    // Verdict is assigned after the loop, once the team median is known.
+    const productivity: AgentSummary['productivity'] = 'Meets Target';
 
     // Utilisation
     const callMins   = answered.reduce((s, c) => s + c.talkTime / 60, 0);
@@ -155,12 +156,47 @@ export function computeAgentSummaries(
       calls: callCount, emails: emailCount, chats: chatCount,
       escalations: escalations.length, tickets: uniqueTickets.size,
       totalInteractions, utilisation, fcr, fcrAvailable, bounceRate,
-      avgAHT, avgHoldTime, avgTalkTime, productivity,
+      avgAHT, avgHoldTime, avgTalkTime, productivity, perDay,
       dates: activeDates,
     });
   }
 
+  // ── Productivity verdict ────────────────────────────────────
+  // 'absolute' — against a fixed interactions/day target.
+  // 'median'   — banded against the team's own median, so the verdict stays
+  //              meaningful when volume shifts and can never mark everyone red.
+  //              Baseline is the English roster only (Spanish excluded).
+  const baseline = summaries.filter(s => s.queueScope === 'English' && s.totalInteractions > 0);
+  const median = (() => {
+    if (!baseline.length) return 0;
+    const v = baseline.map(s => s.perDay).sort((a, b) => a - b);
+    const mid = Math.floor(v.length / 2);
+    return v.length % 2 ? v[mid] : (v[mid - 1] + v[mid]) / 2;
+  })();
+
+  for (const s of summaries) {
+    if (mode === 'median' && median > 0) {
+      s.productivity = s.perDay >= median * 1.15 ? 'Exceeds Target'
+        : s.perDay >= median * 0.85 ? 'Meets Target'
+        : 'Below Target';
+    } else {
+      s.productivity = s.perDay >= dailyTarget * 1.1 ? 'Exceeds Target'
+        : s.perDay >= dailyTarget * 0.85 ? 'Meets Target'
+        : 'Below Target';
+    }
+  }
+
   return summaries.sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/** Median interactions/day across the English roster — for setting the target from evidence. */
+export function teamMedianPerDay(summaries: AgentSummary[]): number {
+  const v = summaries
+    .filter(s => s.queueScope === 'English' && s.totalInteractions > 0)
+    .map(s => s.perDay).sort((a, b) => a - b);
+  if (!v.length) return 0;
+  const mid = Math.floor(v.length / 2);
+  return v.length % 2 ? v[mid] : (v[mid - 1] + v[mid]) / 2;
 }
 
 // ── Queue Summary ─────────────────────────────────────────────
@@ -322,7 +358,7 @@ export function computeCoachingInsights(
     insights.push({ type:'strength', category:'Utilisation', label:'High Utilisation',
       value:`${Math.round(summary.utilisation*100)}%`, details:[], severity:'low' });
 
-  if (perDay >= DAILY_TARGET)
+  if (summary.productivity === 'Exceeds Target')
     insights.push({ type:'strength', category:'Productivity', label:'High Productivity',
       value:`${summary.totalInteractions} interactions (${perDay.toFixed(1)}/day)`, details:[], severity:'low' });
 
@@ -339,9 +375,9 @@ export function computeCoachingInsights(
       value:`${Math.round(summary.utilisation*100)}%`, details:[],
       severity: summary.utilisation < 0.4 ? 'high' : 'medium' });
 
-  if (perDay < DAILY_TARGET * 0.8 && summary.totalInteractions > 0)
+  if (summary.productivity === 'Below Target' && summary.totalInteractions > 0)
     insights.push({ type:'improvement', category:'Productivity', label:'Low Productivity',
-      value:`${perDay.toFixed(1)}/day (target: ${DAILY_TARGET})`, details:[], severity:'medium' });
+      value:`${perDay.toFixed(1)}/day`, details:[], severity:'medium' });
 
   const longHold = enriched.filter(c => ANSWERED_STATUSES.has(c.callStatus) && c.holdTime > HIGH_HOLD_THRESHOLD);
   if (longHold.length)

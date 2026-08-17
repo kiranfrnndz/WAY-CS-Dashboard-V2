@@ -100,6 +100,8 @@ export interface AgentSummary {
   avgHoldTime: number;
   avgTalkTime: number;
   productivity: 'Below Target' | 'Meets Target' | 'Exceeds Target';
+  /** Interactions per active day — the figure the productivity verdict is based on. */
+  perDay: number;
   /**
    * Union of CCDR call dates AND CRM ticket dates. Previously call dates only,
    * which dropped email-only days from the denominator and inflated per-day
@@ -214,7 +216,20 @@ export const FCR_EXCLUDED_TYPES = new Set([
 
 export const HIGH_HOLD_THRESHOLD = 240;
 export const LONG_AHT_THRESHOLD = 330;
+/**
+ * Default interactions/day target.
+ *
+ * NOTE: 60/day was not derived from this team's actual volume. On a 13-day
+ * export at ~24 calls/agent/day, no agent can reach the 51/day "Meets"
+ * threshold, so every card renders "Below Target" — which reads as a team-wide
+ * failure when it is really a mis-set threshold. The target is now adjustable
+ * from the dashboard, and the team median is shown alongside it so it can be
+ * set from evidence rather than assumption.
+ */
 export const DAILY_TARGET = 60;
+
+/** How the productivity verdict is decided. */
+export type ProductivityMode = 'absolute' | 'median';
 export const AVAILABLE_MINUTES = 480;
 
 export const WRAP_BUCKETS = [

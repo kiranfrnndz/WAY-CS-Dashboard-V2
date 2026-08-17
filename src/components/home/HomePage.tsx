@@ -12,13 +12,18 @@ import ChatIcon from '@mui/icons-material/Chat';
 import ConfirmationNumberIcon from '@mui/icons-material/ConfirmationNumber';
 import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
-import type { AgentSummary, UnrosteredAgent } from '../../types';
+import type { AgentSummary, UnrosteredAgent, ProductivityMode } from '../../types';
+import { teamMedianPerDay } from '../../engines/metrics';
 import StatCard from '../shared/StatCard';
 import { fmtPct } from '../../utils/format';
 
 interface HomePageProps {
   agents: AgentSummary[];
   unrostered?: UnrosteredAgent[];
+  dailyTarget: number;
+  prodMode: ProductivityMode;
+  onTargetChange: (n: number) => void;
+  onModeChange: (m: ProductivityMode) => void;
   onSelectAgent: (name: string) => void;
 }
 
@@ -132,10 +137,21 @@ function AgentTile({ agent, onClick }: { agent: AgentSummary; onClick: () => voi
   );
 }
 
-export default function HomePage({ agents, unrostered = [], onSelectAgent }: HomePageProps) {
+export default function HomePage({
+  agents, unrostered = [], dailyTarget, prodMode,
+  onTargetChange, onModeChange, onSelectAgent,
+}: HomePageProps) {
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('All');
   const [scope, setScope] = useState<ScopeFilter>('English');
+  const [showUnrostered, setShowUnrostered] = useState(false);
+
+  // Only names that actually need a decision. Known non-CS are already excluded
+  // and are not surfaced on this view.
+  const unknownNames = useMemo(
+    () => unrostered.filter(u => !u.knownNonCS),
+    [unrostered]
+  );
 
   /**
    * Team aggregates are computed on the CURRENT SCOPE, and scope defaults to
@@ -170,6 +186,8 @@ export default function HomePage({ agents, unrostered = [], onSelectAgent }: Hom
       return matchSearch && matchFilter;
     });
   }, [scoped, search, filter]);
+
+  const median = useMemo(() => teamMedianPerDay(agents), [agents]);
 
   const englishCount = useMemo(() => agents.filter(a => a.queueScope === 'English').length, [agents]);
   const spanishCount = useMemo(() => agents.filter(a => a.queueScope === 'Spanish').length, [agents]);
@@ -224,52 +242,81 @@ export default function HomePage({ agents, unrostered = [], onSelectAgent }: Hom
         </Typography>
       </Box>
 
-      {/* Unrostered activity — names in the data that are not on the roster */}
-      {unrostered.length > 0 && (
-        <Paper elevation={0} sx={{ border: '1px solid #FFE0B2', background: '#FFFDF7', borderRadius: 2, p: 2, mb: 2.5 }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-            <WarningAmberIcon sx={{ fontSize: 18, color: '#E65100' }} />
-            <Typography sx={{ fontSize: '0.8rem', fontWeight: 700, color: '#E65100' }}>
-              {unrostered.length} unrostered name{unrostered.length === 1 ? '' : 's'} in the data — excluded from all KPIs
+      {/* Productivity basis — the verdict on every card depends on this.
+          A fixed 60/day was not derived from this team's volume; on a 13-day
+          export it marks everyone Below Target. Median banding compares agents
+          to their own team instead. */}
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2.5, flexWrap: 'wrap' }}>
+        <Typography sx={{ fontSize: '0.7rem', fontWeight: 700, color: '#5C6B8A', textTransform: 'uppercase' }}>
+          Productivity basis
+        </Typography>
+        <FormControl size="small" sx={{ minWidth: 190 }}>
+          <Select value={prodMode} onChange={e => onModeChange(e.target.value as ProductivityMode)}>
+            <MenuItem value="absolute">Fixed target / day</MenuItem>
+            <MenuItem value="median">Banded vs team median</MenuItem>
+          </Select>
+        </FormControl>
+        {prodMode === 'absolute' && (
+          <TextField
+            size="small" type="number" label="Target / day"
+            value={dailyTarget}
+            onChange={e => onTargetChange(Math.max(1, Number(e.target.value) || 1))}
+            sx={{ width: 130 }}
+          />
+        )}
+        <Tooltip title="Median interactions per active day across the English roster. Use this to set a target from evidence rather than assumption.">
+          <Chip
+            label={`Team median: ${median.toFixed(1)}/day`}
+            size="small"
+            onClick={prodMode === 'absolute' ? () => onTargetChange(Math.round(median)) : undefined}
+            sx={{ fontSize: '0.7rem', background: '#E3F2FD', color: '#1565C0', fontWeight: 700,
+                  cursor: prodMode === 'absolute' ? 'pointer' : 'default' }}
+          />
+        </Tooltip>
+        {prodMode === 'absolute' && median > 0 && dailyTarget > median * 1.5 && (
+          <Typography sx={{ fontSize: '0.7rem', color: '#E65100' }}>
+            Target is more than 1.5&times; the team median — most agents will read Below Target.
+          </Typography>
+        )}
+      </Box>
+
+      {/* Unrostered activity — ONLY names that need a decision.
+          Known non-CS names (TLs, QC, Disputes, Decagon, ex-team, non-India) are
+          NOT rendered: they are already excluded and listing them every load is
+          noise on a team productivity view. Only "Unknown" names appear here,
+          because those are either a new joiner or an unmapped variant that is
+          silently under-counting a rostered agent. Empty = nothing renders. */}
+      {unknownNames.length > 0 && (
+        <Paper elevation={0} sx={{ border: '1px solid #FFE0B2', background: '#FFFDF7', borderRadius: 2, px: 2, py: 1.25, mb: 2 }}>
+          <Box
+            onClick={() => setShowUnrostered(v => !v)}
+            sx={{ display: 'flex', alignItems: 'center', gap: 1, cursor: 'pointer' }}
+          >
+            <WarningAmberIcon sx={{ fontSize: 16, color: '#E65100' }} />
+            <Typography sx={{ fontSize: '0.75rem', fontWeight: 700, color: '#E65100', flex: 1 }}>
+              {unknownNames.length} unrecognised name{unknownNames.length === 1 ? '' : 's'} in the data — excluded from all KPIs
+            </Typography>
+            <Typography sx={{ fontSize: '0.7rem', color: '#B26500' }}>
+              {showUnrostered ? 'hide' : 'show'}
             </Typography>
           </Box>
-          <Typography sx={{ fontSize: '0.72rem', color: '#7A6A55', mb: 1.5 }}>
-            Known non-CS names are expected. Anything under “Unknown” is either a new joiner or an
-            unmapped name variant — if it is a variant of a rostered agent, add it to ALIASES in roster.ts
-            or that agent’s volume is being under-counted.
-          </Typography>
-          {(['Unknown', 'Known non-CS'] as const).map(group => {
-            const rows = unrostered.filter(u => (group === 'Known non-CS') === u.knownNonCS);
-            if (!rows.length) return null;
-            return (
-              <Box key={group} sx={{ mb: 1 }}>
-                <Typography sx={{ fontSize: '0.65rem', fontWeight: 700, color: '#5C6B8A', textTransform: 'uppercase', mb: 0.5 }}>
-                  {group} ({rows.length})
-                </Typography>
-                <Box sx={{ display: 'flex', gap: 0.6, flexWrap: 'wrap' }}>
-                  {rows.map(u => (
-                    <Tooltip
-                      key={u.name}
-                      title={`${u.calls} CCDR calls · ${u.crmRows} CRM rows · source: ${u.source}${
-                        u.variants.length > 1 ? ` · spellings: ${u.variants.join(', ')}` : ''
-                      }`}
-                    >
-                      <Chip
-                        label={`${u.name} (${u.calls + u.crmRows})`}
-                        size="small"
-                        sx={{
-                          fontSize: '0.66rem', height: 22,
-                          background: group === 'Unknown' ? '#FFF3E0' : '#F1F3F8',
-                          color: group === 'Unknown' ? '#E65100' : '#5C6B8A',
-                          border: group === 'Unknown' ? '1px solid #FFCC80' : '1px solid transparent',
-                        }}
-                      />
-                    </Tooltip>
-                  ))}
-                </Box>
+          {showUnrostered && (
+            <Box sx={{ mt: 1.25 }}>
+              <Typography sx={{ fontSize: '0.7rem', color: '#7A6A55', mb: 1 }}>
+                Either a new joiner, or a spelling variant of a rostered agent — if it is a
+                variant, that agent&rsquo;s volume is being under-counted until it is added to
+                ALIASES in roster.ts.
+              </Typography>
+              <Box sx={{ display: 'flex', gap: 0.6, flexWrap: 'wrap' }}>
+                {unknownNames.map(u => (
+                  <Tooltip key={u.name} title={`${u.calls} CCDR calls · ${u.crmRows} CRM rows · source: ${u.source}`}>
+                    <Chip label={`${u.name} (${u.calls + u.crmRows})`} size="small"
+                      sx={{ fontSize: '0.66rem', height: 22, background: '#FFF3E0', color: '#E65100', border: '1px solid #FFCC80' }} />
+                  </Tooltip>
+                ))}
               </Box>
-            );
-          })}
+            </Box>
+          )}
         </Paper>
       )}
 

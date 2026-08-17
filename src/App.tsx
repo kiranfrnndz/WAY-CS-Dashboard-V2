@@ -1,7 +1,8 @@
 import { useState, useCallback } from 'react';
 import { Box, Container, Typography, AppBar, Toolbar, Chip, Snackbar, Alert, CircularProgress } from '@mui/material';
 import SpeedIcon from '@mui/icons-material/Speed';
-import type { CCDRRow, AgentCallRow, CRMRow, AgentSummary } from './types';
+import type { CCDRRow, AgentCallRow, CRMRow, AgentSummary, ProductivityMode } from './types';
+import { DAILY_TARGET } from './types';
 import { parseCCDR, parseAgentCall, parseCRM } from './engines/fileParser';
 import { computeAgentSummaries, computeUnrostered } from './engines/metrics';
 import FileUploadPanel from './components/shared/FileUploadPanel';
@@ -15,9 +16,11 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
   const [selectedAgent, setSelectedAgent] = useState<string | null>(null);
+  const [dailyTarget, setDailyTarget] = useState<number>(DAILY_TARGET);
+  const [prodMode, setProdMode] = useState<ProductivityMode>('absolute');
 
   const summaries: AgentSummary[] = ccdr || crm
-    ? computeAgentSummaries(ccdr || [], crm || [])
+    ? computeAgentSummaries(ccdr || [], crm || [], dailyTarget, prodMode)
     : [];
 
   // Names present in the data but not on the roster — surfaced, never scored.
@@ -103,6 +106,10 @@ export default function App() {
           <HomePage
             agents={summaries}
             unrostered={unrostered}
+            dailyTarget={dailyTarget}
+            prodMode={prodMode}
+            onTargetChange={setDailyTarget}
+            onModeChange={setProdMode}
             onSelectAgent={setSelectedAgent}
           />
         )}
